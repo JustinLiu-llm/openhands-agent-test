@@ -433,6 +433,14 @@
                 <label>API 地址</label>
                 <input type="text" id="apiUrl" value="http://localhost:8000" placeholder="http://localhost:8000">
             </div>
+            <div class="form-group">
+                <label>LLM API 地址</label>
+                <input type="text" id="llmApiUrl" value="http://localhost:8881/llm/gemini-3-flash-preview/v1" placeholder="http://localhost:8881/llm/xxx/v1">
+            </div>
+            <div class="form-group">
+                <label>API Key</label>
+                <input type="text" id="apiKey" value="sk-test-key" placeholder="输入 API Key">
+            </div>
             <div class="modal-buttons">
                 <button class="btn btn-primary" onclick="connect()">连接</button>
             </div>
@@ -563,16 +571,32 @@
             localStorage.setItem('messageHistory', JSON.stringify(messageHistory));
         }
 
+        let LLM_API_URL = localStorage.getItem('llmApiUrl') || 'http://localhost:8881/llm/gemini-3-flash-preview/v1';
+        let API_KEY = localStorage.getItem('apiKey') || 'sk-test-key';
+
         function connect() {
             const apiUrl = document.getElementById('apiUrl').value.trim();
+            const llmApiUrl = document.getElementById('llmApiUrl').value.trim();
+            const apiKey = document.getElementById('apiKey').value.trim();
+            
             if (apiUrl) {
                 API_BASE = apiUrl;
+                LLM_API_URL = llmApiUrl;
+                API_KEY = apiKey;
+                
+                // 保存到 localStorage
+                localStorage.setItem('llmApiUrl', llmApiUrl);
+                localStorage.setItem('apiKey', apiKey);
+                
                 document.getElementById('settingsModal').classList.remove('show');
                 checkConnection();
             }
         }
 
         function showSettings() {
+            // 显示当前配置
+            document.getElementById('llmApiUrl').value = LLM_API_URL;
+            document.getElementById('apiKey').value = API_KEY;
             document.getElementById('settingsModal').classList.add('show');
         }
 
@@ -581,8 +605,15 @@
             try {
                 const response = await fetch(`${API_BASE}/api/conversations`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name: `对话 ${new Date().toLocaleString()}` })
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'X-API-Key': API_KEY
+                    },
+                    body: JSON.stringify({ 
+                        name: `对话 ${new Date().toLocaleString()}`,
+                        llm_api_url: LLM_API_URL,
+                        api_key: API_KEY
+                    })
                 });
                 const data = await response.json();
                 
@@ -806,8 +837,15 @@
             try {
                 const response = await fetch(`${API_BASE}/api/conversations/${currentConversationId}/ask_agent`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ question: message })
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'X-API-Key': API_KEY
+                    },
+                    body: JSON.stringify({ 
+                        question: message,
+                        llm_api_url: LLM_API_URL,
+                        api_key: API_KEY
+                    })
                 });
                 
                 const data = await response.json();

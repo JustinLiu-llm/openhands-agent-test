@@ -603,6 +603,8 @@
         // 创建新对话
         async function newConversation() {
             try {
+                console.log('创建对话，API_BASE:', API_BASE);
+                
                 const response = await fetch(`${API_BASE}/api/conversations`, {
                     method: 'POST',
                     headers: { 
@@ -610,12 +612,13 @@
                         'X-API-Key': API_KEY
                     },
                     body: JSON.stringify({ 
-                        name: `对话 ${new Date().toLocaleString()}`,
-                        llm_api_url: LLM_API_URL,
-                        api_key: API_KEY
+                        name: `对话 ${new Date().toLocaleString()}`
                     })
                 });
+                
+                console.log('响应状态:', response.status);
                 const data = await response.json();
+                console.log('创建对话返回:', data);
                 
                 if (data.conversation_id) {
                     currentConversationId = data.conversation_id;
@@ -631,8 +634,12 @@
                     updateConversationList();
                     clearMessages();
                     return data.conversation_id;
+                } else {
+                    console.error('创建对话失败，返回数据没有 conversation_id:', data);
+                    alert('创建对话失败: ' + JSON.stringify(data));
                 }
             } catch (e) {
+                console.error('创建对话异常:', e);
                 alert('创建对话失败: ' + e.message);
             }
             return null;

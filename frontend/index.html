@@ -758,8 +758,14 @@
             
             if (!message) return;
             
-            if (!currentConversationId) {
-                await newConversation();
+            // 确保有有效的会话 ID
+            if (!currentConversationId || currentConversationId === 'null') {
+                const newId = await newConversation();
+                if (!newId) {
+                    alert('创建对话失败，请检查后端服务是否启动');
+                    return;
+                }
+                currentConversationId = newId;
             }
 
             // 显示用户消息
@@ -801,7 +807,7 @@
                 const response = await fetch(`${API_BASE}/api/conversations/${currentConversationId}/ask_agent`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: message })
+                    body: JSON.stringify({ question: message })
                 });
                 
                 const data = await response.json();

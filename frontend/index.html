@@ -608,8 +608,7 @@
                 const response = await fetch(`${API_BASE}/api/conversations`, {
                     method: 'POST',
                     headers: { 
-                        'Content-Type': 'application/json',
-                        'X-API-Key': API_KEY
+                        'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({ 
                         name: `对话 ${new Date().toLocaleString()}`
@@ -845,13 +844,10 @@
                 const response = await fetch(`${API_BASE}/api/conversations/${currentConversationId}/ask_agent`, {
                     method: 'POST',
                     headers: { 
-                        'Content-Type': 'application/json',
-                        'X-API-Key': API_KEY
+                        'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({ 
-                        question: message,
-                        llm_api_url: LLM_API_URL,
-                        api_key: API_KEY
+                        question: message
                     })
                 });
                 

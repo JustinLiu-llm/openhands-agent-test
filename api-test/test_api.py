@@ -40,7 +40,7 @@ class OpenHandsAPIClient:
         """列出所有对话"""
         return self.session.get(
             f"{self.base_url}/api/conversations",
-            params={"page_size": page_size}
+            params={"page_size": page_size, "ids": []}
         ).json()
     
     def search_conversations(self, query: str) -> Dict[str, Any]:
@@ -50,9 +50,13 @@ class OpenHandsAPIClient:
             params={"query": query}
         ).json()
     
-    def create_conversation(self, name: Optional[str] = None) -> Dict[str, Any]:
+    def create_conversation(self, name: Optional[str] = None, agent: str = "CodeAgent", workspace: str = "/workspace") -> Dict[str, Any]:
         """创建新对话"""
-        data = {"name": name} if name else {}
+        data = {
+            "name": name or f"对话 {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+            "agent": agent,
+            "workspace": workspace
+        }
         return self.session.post(
             f"{self.base_url}/api/conversations",
             json=data

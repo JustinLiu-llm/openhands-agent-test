@@ -504,8 +504,9 @@
 
     <script>
         let API_BASE = 'http://localhost:8000';
-        let currentConversationId = null;
-        let conversations = [];
+        let currentConversationId = localStorage.getItem('currentConversationId') || null;
+        let conversations = JSON.parse(localStorage.getItem('conversations') || '[]');
+        let messageHistory = JSON.parse(localStorage.getItem('messageHistory') || '{}'); // 存储每个对话的消息历史
 
         // 页面加载完成后检查连接
         async function checkConnection() {
@@ -513,12 +514,53 @@
                 const response = await fetch(`${API_BASE}/alive`);
                 if (response.ok) {
                     document.getElementById('statusIndicator').style.background = '#4ade80';
+                    // 连接成功后，加载对话列表
+                    await loadConversations();
+                    // 如果有之前的会话，加载该会话的历史消息
+                    if (currentConversationId) {
+                        await switchConversation(currentConversationId);
+                    } else {
+                        // 自动创建新对话
+                        await newConversation();
+                    }
                     return true;
                 }
             } catch (e) {
                 document.getElementById('statusIndicator').style.background = '#ef4444';
             }
             return false;
+        }
+
+        // 从后端加载对话列表
+        async function loadConversations() {
+            try {
+                const response = await fetch(`${API_BASE}/api/conversations?page_size=50`);
+                const data = await response.json();
+                
+                if (data.conversations && data.conversations.length > 0) {
+                    // 从后端获取对话列表
+                    conversations = data.conversations.map(conv => ({
+                        id: conv.conversation_id,
+                        name: conv.name || `对话 ${conv.conversation_id.slice(0, 8)}`
+                    }));
+                    localStorage.setItem('conversations', JSON.stringify(conversations));
+                    updateConversationList();
+                }
+            } catch (e) {
+                console.log('加载对话列表失败，使用本地存储');
+            }
+        }
+
+        // 保存对话到本地存储
+        function saveConversations() {
+            localStorage.setItem('conversations', JSON.stringify(conversations));
+            localStorage.setItem('currentConversationId', currentConversationId || '');
+        }
+
+        // 保存消息历史到本地存储
+        function saveMessageHistory(convId, messages) {
+            messageHistory[convId] = messages;
+            localStorage.setItem('messageHistory', JSON.stringify(messageHistory));
         }
 
         function connect() {
@@ -546,16 +588,23 @@
                 
                 if (data.conversation_id) {
                     currentConversationId = data.conversation_id;
+                    // 添加到对话列表开头
                     conversations.unshift({
                         id: data.conversation_id,
-                        name: `对话 ${new Date().toLocaleTimeString()}`
+                        name: `新对话`
                     });
+                    // 初始化该对话的消息历史
+                    messageHistory[data.conversation_id] = [];
+                    saveConversations();
+                    saveMessageHistory(data.conversation_id, []);
                     updateConversationList();
                     clearMessages();
+                    return data.conversation_id;
                 }
             } catch (e) {
                 alert('创建对话失败: ' + e.message);
             }
+            return null;
         }
 
         // 切换对话列表显示
@@ -566,19 +615,140 @@
         // 更新对话列表
         function updateConversationList() {
             const container = document.getElementById('conversations');
+            if (conversations.length === 0) {
+                container.innerHTML = '<div class="empty-state" style="padding: 20px;">暂无对话</div>';
+                return;
+            }
             container.innerHTML = conversations.map(conv => `
                 <div class="conversation-item ${conv.id === currentConversationId ? 'active' : ''}" 
                      onclick="switchConversation('${conv.id}')">
-                    ${conv.name}
+                    <span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${conv.name}</span>
+                    <button class="delete-btn" onclick="deleteConversation('${conv.id}', event)" title="删除对话">🗑️</button>
                 </div>
             `).join('');
+            
+            // 添加删除按钮样式
+            const style = document.createElement('style');
+            style.textContent = `
+                .delete-btn {
+                    background: none;
+                    border: none;
+                    cursor: pointer;
+                    font-size: 12px;
+                    opacity: 0.5;
+                    padding: 2px 5px;
+                }
+                .delete-btn:hover {
+                    opacity: 1;
+                }
+                .conversation-item {
+                    display: flex;
+                    align-items: center;
+                }
+            `;
+            if (!document.getElementById('deleteBtnStyle')) {
+                style.id = 'deleteBtnStyle';
+                document.head.appendChild(style);
+            }
         }
 
         // 切换对话
         async function switchConversation(id) {
             currentConversationId = id;
+            saveConversations();
             updateConversationList();
-            // 可以在这里加载历史消息
+            
+            // 加载该对话的历史消息
+            const messages = messageHistory[id] || [];
+            if (messages.length > 0) {
+                // 显示历史消息
+                const messagesContainer = document.getElementById('chatMessages');
+                messagesContainer.innerHTML = '';
+                
+                if (messages.length === 0) {
+                    messagesContainer.innerHTML = `
+                        <div class="empty-state" id="emptyState">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+                                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                            </svg>
+                            <p>开始一个新对话吧！</p>
+                        </div>
+                    `;
+                } else {
+                    messages.forEach(msg => {
+                        addMessage(msg.role, msg.content);
+                    });
+                }
+            } else {
+                // 尝试从后端加载历史
+                try {
+                    const response = await fetch(`${API_BASE}/api/conversations/${id}/events?page_size=100`);
+                    const data = await response.json();
+                    
+                    if (data.events && data.events.length > 0) {
+                        const messagesContainer = document.getElementById('chatMessages');
+                        messagesContainer.innerHTML = '';
+                        
+                        const loadedMessages = [];
+                        data.events.forEach(event => {
+                            if (event.msg_type === 'text' || event.message) {
+                                const content = event.message || event.content || '';
+                                if (content.trim()) {
+                                    loadedMessages.push({ role: event.sender || 'bot', content: content });
+                                    addMessage(event.sender || 'bot', formatMessage(content));
+                                }
+                            }
+                        });
+                        
+                        // 保存到本地历史
+                        if (loadedMessages.length > 0) {
+                            messageHistory[id] = loadedMessages;
+                            saveMessageHistory(id, loadedMessages);
+                        }
+                    } else {
+                        clearMessages();
+                    }
+                } catch (e) {
+                    console.log('加载历史消息失败:', e);
+                    clearMessages();
+                }
+            }
+        }
+
+        // 删除对话
+        async function deleteConversation(id, event) {
+            event.stopPropagation();
+            
+            if (!confirm('确定要删除这个对话吗？')) {
+                return;
+            }
+            
+            try {
+                await fetch(`${API_BASE}/api/conversations/${id}`, {
+                    method: 'DELETE'
+                });
+                
+                // 从列表中移除
+                conversations = conversations.filter(c => c.id !== id);
+                delete messageHistory[id];
+                
+                saveConversations();
+                localStorage.setItem('messageHistory', JSON.stringify(messageHistory));
+                
+                // 如果删除的是当前对话，切换到第一个或创建新对话
+                if (id === currentConversationId) {
+                    if (conversations.length > 0) {
+                        await switchConversation(conversations[0].id);
+                    } else {
+                        currentConversationId = null;
+                        await newConversation();
+                    }
+                }
+                
+                updateConversationList();
+            } catch (e) {
+                alert('删除对话失败: ' + e.message);
+            }
         }
 
         // 发送消息
@@ -597,6 +767,33 @@
             input.value = '';
             input.style.height = 'auto';
 
+            // 保存用户消息到历史
+            if (!messageHistory[currentConversationId]) {
+                messageHistory[currentConversationId] = [];
+            }
+            messageHistory[currentConversationId].push({ role: 'user', content: message });
+            
+            // 如果是对话的第一条消息，用它作为对话标题
+            const convIndex = conversations.findIndex(c => c.id === currentConversationId);
+            if (convIndex !== -1 && conversations[convIndex].name === '新对话') {
+                // 取消息前20个字符作为标题
+                const title = message.slice(0, 20) + (message.length > 20 ? '...' : '');
+                conversations[convIndex].name = title;
+                updateConversationList();
+                saveConversations();
+                
+                // 尝试更新后端对话名称
+                try {
+                    await fetch(`${API_BASE}/api/conversations/${currentConversationId}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name: title })
+                    });
+                } catch (e) {
+                    console.log('更新对话名称失败');
+                }
+            }
+
             // 显示加载状态
             showTypingIndicator();
 
@@ -610,19 +807,28 @@
                 const data = await response.json();
                 hideTypingIndicator();
                 
+                let botResponse = '';
                 // 显示 AI 响应
                 if (data.events) {
                     data.events.forEach(event => {
-                        if (event.observation) {
-                            addMessage('bot', formatMessage(event.observation));
-                        } else if (event.content) {
-                            addMessage('bot', formatMessage(event.content));
+                        const content = event.observation || event.content || '';
+                        if (content.trim()) {
+                            botResponse += content + '\n';
+                            addMessage('bot', formatMessage(content));
                         }
                     });
                 } else if (data.message) {
+                    botResponse = data.message;
                     addMessage('bot', formatMessage(data.message));
                 } else {
-                    addMessage('bot', formatMessage(JSON.stringify(data, null, 2)));
+                    botResponse = JSON.stringify(data, null, 2);
+                    addMessage('bot', formatMessage(botResponse));
+                }
+                
+                // 保存机器人回复到历史
+                if (botResponse.trim()) {
+                    messageHistory[currentConversationId].push({ role: 'bot', content: botResponse });
+                    saveMessageHistory(currentConversationId, messageHistory[currentConversationId]);
                 }
             } catch (e) {
                 hideTypingIndicator();

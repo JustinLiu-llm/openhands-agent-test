@@ -605,38 +605,59 @@
             try {
                 console.log('创建对话，API_BASE:', API_BASE);
                 
+                // 使用正确的 API 格式
+                const requestBody = {
+                    agent: {
+                        llm: {
+                            model: "openai/gemini-3-flash-preview",
+                            api_key: API_KEY,
+                            base_url: LLM_API_URL
+                        },
+                        tools: [
+                            { name: "terminal" },
+                            { name: "file_editor" },
+                            { name: "task_tracker" },
+                            { name: "browser_tool_set" }
+                        ],
+                        kind: "Agent"
+                    },
+                    workspace: {
+                        working_dir: "workspace/project",
+                        kind: "LocalWorkspace"
+                    }
+                };
+                
                 const response = await fetch(`${API_BASE}/api/conversations`, {
                     method: 'POST',
                     headers: { 
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ 
-                        name: `对话 ${new Date().toLocaleString()}`,
-                        agent: "CodeAgent",
-                        workspace: "/workspace"
-                    })
+                    body: JSON.stringify(requestBody)
                 });
                 
                 console.log('响应状态:', response.status);
                 const data = await response.json();
                 console.log('创建对话返回:', data);
                 
-                if (data.conversation_id) {
-                    currentConversationId = data.conversation_id;
+                // 后端返回的是 id 而不是 conversation_id
+                const conversationId = data.id || data.conversation_id;
+                
+                if (conversationId) {
+                    currentConversationId = conversationId;
                     // 添加到对话列表开头
                     conversations.unshift({
-                        id: data.conversation_id,
+                        id: conversationId,
                         name: `新对话`
                     });
                     // 初始化该对话的消息历史
-                    messageHistory[data.conversation_id] = [];
+                    messageHistory[conversationId] = [];
                     saveConversations();
-                    saveMessageHistory(data.conversation_id, []);
+                    saveMessageHistory(conversationId, []);
                     updateConversationList();
                     clearMessages();
-                    return data.conversation_id;
+                    return conversationId;
                 } else {
-                    console.error('创建对话失败，返回数据没有 conversation_id:', data);
+                    console.error('创建对话失败，返回数据没有 id:', data);
                     alert('创建对话失败: ' + JSON.stringify(data));
                 }
             } catch (e) {

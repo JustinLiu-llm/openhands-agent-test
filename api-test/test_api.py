@@ -50,13 +50,33 @@ class OpenHandsAPIClient:
             params={"query": query}
         ).json()
     
-    def create_conversation(self, name: Optional[str] = None, agent: str = "CodeAgent", workspace: str = "/workspace") -> Dict[str, Any]:
+    def create_conversation(self, name: Optional[str] = None, 
+                          llm_model: str = "openai/gemini-3-flash-preview",
+                          llm_api_key: str = "sk-test",
+                          llm_base_url: str = "http://localhost:8881/llm/gemini-3-flash-preview/v1") -> Dict[str, Any]:
         """创建新对话"""
         data = {
-            "name": name or f"对话 {datetime.now().strftime('%Y-%m-%d %H:%M')}",
-            "agent": agent,
-            "workspace": workspace
+            "agent": {
+                "llm": {
+                    "model": llm_model,
+                    "api_key": llm_api_key,
+                    "base_url": llm_base_url
+                },
+                "tools": [
+                    {"name": "terminal"},
+                    {"name": "file_editor"},
+                    {"name": "task_tracker"},
+                    {"name": "browser_tool_set"}
+                ],
+                "kind": "Agent"
+            },
+            "workspace": {
+                "working_dir": "workspace/project",
+                "kind": "LocalWorkspace"
+            }
         }
+        if name:
+            data["name"] = name
         return self.session.post(
             f"{self.base_url}/api/conversations",
             json=data

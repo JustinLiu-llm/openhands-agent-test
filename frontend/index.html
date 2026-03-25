@@ -611,7 +611,9 @@
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({ 
-                        name: `对话 ${new Date().toLocaleString()}`
+                        name: `对话 ${new Date().toLocaleString()}`,
+                        agent: "CodeAgent",
+                        workspace: "/workspace"
                     })
                 });
                 
